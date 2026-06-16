@@ -1,0 +1,58 @@
+Sistema: Gestao de Compras por Orcamentos em Aberto
+
+Arquivo principal:
+comprador_gestaoclick.py
+
+O que ele faz:
+- Conecta na API do GestaoClick usando access token e secret token.
+- Busca os orcamentos com situacao "Em aberto".
+- Agrupa somente itens exatamente iguais.
+- Soma as quantidades.
+- Mostra os numeros dos orcamentos direto na tabela.
+- Consulta estoque do produto, quando marcado.
+- Mostra equivalencias automaticamente abaixo do item, apenas quando a similaridade for de 80% ou mais e houver estoque disponivel.
+- Permite informar o preco unitario por produto agrupado.
+- Permite gravar o preco unitario nos itens de origem do orcamento no GestaoClick.
+- Permite gravar o preco por linha, um produto por vez.
+- Permite substituir manualmente o produto por uma descricao livre, mesmo sem cadastro previo no GestaoClick.
+- Tambem permite buscar produto cadastrado com estoque, quando fizer sentido.
+- So altera a situacao do orcamento quando todos os produtos daquele orcamento estiverem precificados.
+- Permite gravar a sugestao no campo "detalhes" dos itens do orcamento.
+- Permite exportar a lista agrupada em CSV.
+
+Como usar:
+1. Abra o arquivo comprador_gestaoclick.py com Python.
+2. Informe o access token e secret token do GestaoClick.
+3. Clique em "Buscar e agrupar".
+4. Informe o preco unitario na linha do produto.
+5. Clique em "Gravar" na propria linha.
+6. O status do orcamento so muda quando todos os produtos dele tiverem preco.
+
+Status quando terminar:
+O campo "Status quando terminar" vem preenchido como "Precificado".
+Se esse status existir no GestaoClick, o sistema altera o orcamento para ele quando todas as linhas estiverem com preco.
+Se voce usa outro nome de status, altere esse campo antes de gravar.
+
+Loja:
+O sistema localiza automaticamente a loja NOVAPRINT na API do GestaoClick.
+Voce nao precisa informar o ID da loja.
+
+Seguranca:
+O sistema nao salva seus tokens da API em arquivo. Voce informa os tokens quando abrir.
+
+Equivalencias:
+O sistema compara o nome do item solicitado com os produtos cadastrados no GestaoClick.
+So aparece sugestao quando a equivalencia for de 80% ou mais e o produto sugerido tiver estoque disponivel.
+As sugestoes aparecem em uma linha logo abaixo do item principal.
+
+Substituicao manual:
+Na coluna "Substituicao manual", digite a descricao exata do item que sera fornecido e clique em "Aplicar".
+Isso nao exige que o produto ja esteja cadastrado no GestaoClick.
+Se quiser usar um produto cadastrado, clique em "Buscar cad.", escolha uma opcao com estoque e clique em "Substituir".
+
+Importante:
+O agrupamento automatico usa produto_id, variacao_id e unidade quando o produto_id existe.
+Isso evita juntar produtos parecidos por engano.
+
+Antes de usar o botao "Gravar sugestao nos detalhes" em producao, teste com um orcamento simples.
+Esse botao altera o campo detalhes dos itens de origem diretamente no GestaoClick via API.

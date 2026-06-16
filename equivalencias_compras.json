@@ -1,0 +1,15 @@
+{
+  "regras": [
+    {
+      "produto_id": "",
+      "nome_exato": "Caneta Bic",
+      "sugestoes": [
+        {
+          "produto_id": "",
+          "nome": "Caneta Bic Cristal",
+          "observacao": "Produto aprovado como alternativa de compra."
+        }
+      ]
+    }
+  ]
+}
