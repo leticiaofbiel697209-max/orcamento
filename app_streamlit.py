@@ -1,4 +1,5 @@
 import json
+import re
 import time
 import unicodedata
 import urllib.error
@@ -275,6 +276,50 @@ def product_candidates(product):
     return candidates
 
 
+def registered_product_search(api, query, store_id, context_name=""):
+    attempts = []
+
+    def add_attempt(value):
+        value = as_text(value)
+        if value and value not in attempts:
+            attempts.append(value)
+
+    add_attempt(query)
+    clean_query = searchable_name(query)
+    add_attempt(clean_query)
+    add_attempt(re.sub(r"([a-zA-Z]+)(\d+)", r"\1 \2", clean_query))
+    add_attempt(re.sub(r"\d+", "", clean_query).strip())
+
+    for word in clean_query.split():
+        if len(word) >= 4:
+            add_attempt(word)
+
+    # If the typed search is too specific or misspelled, use the item being quoted
+    # as a fallback because it usually contains the correct catalog keywords.
+    add_attempt(suggestion_query(context_name))
+    for word in searchable_name(context_name).split():
+        if len(word) >= 4:
+            add_attempt(word)
+
+    seen_products = set()
+    candidates = []
+    for attempt in attempts:
+        if not attempt:
+            continue
+        products = api.product_list_by_name(attempt, store_id, max_pages=3)
+        for product in products:
+            for candidate in product_candidates(product):
+                key = (candidate["productId"], candidate["variationId"], candidate["name"])
+                if key in seen_products:
+                    continue
+                seen_products.add(key)
+                candidate["busca"] = attempt
+                candidates.append(candidate)
+        if len(candidates) >= 25:
+            break
+    return candidates[:25]
+
+
 def automatic_suggestion(api, group, store_id):
     query = suggestion_query(group["name"])
     if not query:
@@ -506,7 +551,7 @@ st.set_page_config(page_title="Gestão de Compras", layout="wide")
 init_state()
 
 st.title("Gestão de Compras - Orçamentos em Aberto")
-st.caption("Streamlit | v ajuste-preco-busca | itens agrupados, preço, substituição manual e sugestão automática")
+st.caption("Streamlit | v busca-tolerante | itens agrupados, preço, substituição manual e sugestão automática")
 
 with st.sidebar:
     st.subheader("Conexão")
@@ -610,14 +655,10 @@ else:
                     st.error(str(exc))
 
             search = m3.text_input("Buscar produto cadastrado", key=f"search_{index}", placeholder="Opcional")
-            b1, b2 = st.columns([1, 4])
-            if b1.button("Buscar cad.", key=f"search_btn_{index}"):
+            if m3.button("Buscar cad.", key=f"search_btn_{index}"):
                 try:
                     api = get_api()
-                    products = api.product_list_by_name(search, st.session_state.store["id"])
-                    options = []
-                    for product in products:
-                        options.extend(product_candidates(product))
+                    options = registered_product_search(api, search, st.session_state.store["id"], group["name"])
                     st.session_state.manual_options[index] = options[:25]
                     if not options:
                         st.warning("Nenhum produto cadastrado encontrado para essa busca.")
@@ -627,8 +668,8 @@ else:
 
             options = st.session_state.manual_options.get(index) or []
             if options:
-                labels = [f'{item["name"]} | estoque {item["stock"]:g}' for item in options]
-                selected_label = b2.selectbox("Opções cadastradas", labels, key=f"registered_{index}")
+                labels = [f'{item["name"]} | estoque {item["stock"]:g} | busca {item.get("busca", "")}' for item in options]
+                selected_label = st.selectbox("Op??es cadastradas", labels, key=f"registered_{index}")
                 selected = options[labels.index(selected_label)]
                 if st.button("Substituir por cadastrado", key=f"replace_registered_{index}"):
                     try:
