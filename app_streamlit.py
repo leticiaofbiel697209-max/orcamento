@@ -45,6 +45,15 @@ def product_key(product):
     return ("texto", as_text(product.get("nome_produto")), as_text(product.get("detalhes")), unit)
 
 
+def effective_unit_price(product):
+    quantity = as_number(product.get("quantidade"))
+    total = as_number(product.get("valor_total"))
+    sale = as_number(product.get("valor_venda"))
+    if total > 0 and quantity > 0:
+        return total / quantity
+    return sale
+
+
 def remove_forbidden_budget_fields(value):
     if isinstance(value, list):
         for item in value:
@@ -290,7 +299,7 @@ def automatic_suggestion(api, group, store_id):
 
 
 def product_is_priced(product):
-    return as_number(product.get("valor_venda")) > 0
+    return effective_unit_price(product) > 0
 
 
 def all_products_priced(budget):
@@ -323,14 +332,17 @@ def build_groups(api, store_id, open_status_id, days_back, include_stock=True, i
                     "suggestion": "",
                     "equivalences": [],
                     "unitPrice": "",
+                    "prices": [],
                     "origins": [],
                 }
             group = groups[key]
             quantity = as_number(product.get("quantidade"))
             group["totalQuantity"] += quantity
-            price = as_number(product.get("valor_venda"))
+            price = effective_unit_price(product)
             if price > 0 and not group["unitPrice"]:
                 group["unitPrice"] = f"{price:.2f}"
+            if price > 0:
+                group["prices"].append(round(price, 4))
             group["origins"].append({
                 "budgetId": as_text(budget.get("id")),
                 "budgetCode": as_text(budget.get("codigo")),
@@ -343,6 +355,9 @@ def build_groups(api, store_id, open_status_id, days_back, include_stock=True, i
 
     for group in groups.values():
         parts = []
+        unique_prices = sorted(set(group.get("prices") or []))
+        if len(unique_prices) > 1:
+            parts.append("Atenção: este item tem preços diferentes nos orçamentos agrupados.")
         if include_stock:
             product = api.product_search(group["name"], group["productId"], store_id)
             group["stock"] = stock_for(product, group)
@@ -491,7 +506,7 @@ st.set_page_config(page_title="Gestão de Compras", layout="wide")
 init_state()
 
 st.title("Gestão de Compras - Orçamentos em Aberto")
-st.caption("Streamlit | itens agrupados, preço, substituição manual e sugestão automática")
+st.caption("Streamlit | v ajuste-preco-busca | itens agrupados, preço, substituição manual e sugestão automática")
 
 with st.sidebar:
     st.subheader("Conexão")
@@ -572,6 +587,9 @@ else:
                         st.session_state.store["id"],
                         selected_final_status,
                     )
+                    if updated <= 0:
+                        st.warning("Nenhum item foi atualizado. Recarregue a lista e tente novamente.")
+                        st.stop()
                     st.session_state.groups.pop(index)
                     st.success(f"Preço gravado em {updated} item(ns). Status alterado em {status_changed} orçamento(s).")
                     st.rerun()
@@ -599,8 +617,10 @@ else:
                     products = api.product_list_by_name(search, st.session_state.store["id"])
                     options = []
                     for product in products:
-                        options.extend([item for item in product_candidates(product) if item["stock"] > 0])
+                        options.extend(product_candidates(product))
                     st.session_state.manual_options[index] = options[:25]
+                    if not options:
+                        st.warning("Nenhum produto cadastrado encontrado para essa busca.")
                     st.rerun()
                 except Exception as exc:
                     st.error(str(exc))
