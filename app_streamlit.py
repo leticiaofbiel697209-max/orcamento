@@ -253,16 +253,26 @@ def product_candidates(product):
     product_id = as_text(product.get("id"))
     base_name = as_text(product.get("nome"))
     unit = as_text(product.get("sigla_unidade")).upper()
+    base_price = as_number(product.get("valor_venda"))
+    if not base_price:
+        values = product.get("valores") or []
+        if values:
+            base_price = as_number(values[0].get("valor_venda"))
     variations = product.get("variacoes") or []
     if variations:
         for wrapped in variations:
             variation = wrapped.get("variacao") or {}
             variation_name = as_text(variation.get("nome"))
+            variation_price = base_price
+            values = variation.get("valores") or []
+            if values:
+                variation_price = as_number(values[0].get("valor_venda")) or variation_price
             candidates.append({
                 "productId": product_id,
                 "variationId": as_text(variation.get("id")),
                 "name": f"{base_name} - {variation_name}" if variation_name else base_name,
                 "stock": as_number(variation.get("estoque")),
+                "price": variation_price,
                 "unit": unit,
             })
     else:
@@ -271,6 +281,7 @@ def product_candidates(product):
             "variationId": "",
             "name": base_name,
             "stock": as_number(product.get("estoque")),
+            "price": base_price,
             "unit": unit,
         })
     return candidates
@@ -506,6 +517,10 @@ def replace_product_registered(api, group, replacement, store_id):
             product["nome_produto"] = replacement["name"]
             if replacement.get("unit"):
                 product["sigla_unidade"] = replacement["unit"]
+            if as_number(replacement.get("price")) > 0:
+                unit_price = as_number(replacement.get("price"))
+                product["valor_venda"] = f"{unit_price:.2f}"
+                product["valor_total"] = f"{unit_price * as_number(product.get('quantidade')):.2f}"
             note = f'[SUBSTITUICAO COMPRA] Produto anterior: {previous}. Substituido por: {replacement["name"]}.'
             details = as_text(product.get("detalhes"))
             product["detalhes"] = f"{details}\n{note}".strip()
@@ -551,7 +566,7 @@ st.set_page_config(page_title="Gestão de Compras", layout="wide")
 init_state()
 
 st.title("Gestão de Compras - Orçamentos em Aberto")
-st.caption("Streamlit | v busca-tolerante | itens agrupados, preço, substituição manual e sugestão automática")
+st.caption("Streamlit | v substitui-e-atualiza | itens agrupados, preço, substituição manual e sugestão automática")
 
 with st.sidebar:
     st.subheader("Conexão")
@@ -674,7 +689,16 @@ else:
                 if st.button("Substituir por cadastrado", key=f"replace_registered_{index}"):
                     try:
                         updated = replace_product_registered(get_api(), group, selected, st.session_state.store["id"])
-                        st.success(f"Produto substituído em {updated} item(ns).")
+                        if updated > 0:
+                            st.session_state.groups[index]["name"] = selected["name"]
+                            st.session_state.groups[index]["productId"] = selected["productId"]
+                            st.session_state.groups[index]["variationId"] = selected["variationId"]
+                            st.session_state.groups[index]["unit"] = selected.get("unit") or group.get("unit")
+                            st.session_state.groups[index]["stock"] = selected.get("stock")
+                            if as_number(selected.get("price")) > 0:
+                                st.session_state.groups[index]["unitPrice"] = f"{as_number(selected.get('price')):.2f}"
+                            st.session_state.manual_options.pop(index, None)
+                        st.success(f"Produto substitu?do em {updated} item(ns).")
                         st.rerun()
                     except Exception as exc:
                         st.error(str(exc))
